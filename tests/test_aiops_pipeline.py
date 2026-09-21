@@ -1,3 +1,6 @@
+import json
+import runpy
+
 from pathlib import Path
 
 from src.anomaly_detector import AnomalyDetector
@@ -42,6 +45,29 @@ def test_anomalous_record_is_detected():
     assert event["type"] == "ANOMALY"
 
 
+def test_detector_reports_all_anomaly_reasons():
+    detector = AnomalyDetector()
+
+    record = {
+        "timestamp": "2026-09-20T10:05:00",
+        "service": "payment-service",
+        "response_time_ms": 501,
+        "cpu_percent": 81,
+        "memory_percent": 81,
+        "log_level": "WARNING",
+        "message": "Service is degraded"
+    }
+
+    event = detector.detect(record)
+
+    assert event["reasons"] == [
+        "High response time",
+        "High CPU utilization",
+        "High memory utilization",
+        "Error log detected"
+    ]
+
+
 def test_producer_publishes_event():
     topic = EventTopic("anomaly-events")
     producer = EventProducer(topic)
@@ -53,6 +79,14 @@ def test_producer_publishes_event():
 
     assert producer.publish(event)
     assert len(topic.get_messages()) == 1
+
+
+def test_producer_rejects_empty_event():
+    topic = EventTopic("anomaly-events")
+    producer = EventProducer(topic)
+
+    assert producer.publish(None) is False
+    assert topic.get_messages() == []
 
 
 def test_consumer_receives_event():
@@ -70,3 +104,48 @@ def test_consumer_receives_event():
     messages = consumer.consume()
 
     assert len(messages) == 1
+
+
+def test_topic_clear_removes_messages():
+    topic = EventTopic("anomaly-events")
+    topic.publish({"type": "ANOMALY"})
+
+    topic.clear()
+
+    assert topic.get_messages() == []
+
+
+def test_run_pipeline_processes_service_data(tmp_path):
+    data = [
+        {
+            "timestamp": "2026-09-20T10:00:00",
+            "service": "payment-service",
+            "response_time_ms": 120,
+            "cpu_percent": 42,
+            "memory_percent": 51,
+            "log_level": "INFO",
+            "message": "Healthy"
+        },
+        {
+            "timestamp": "2026-09-20T10:05:00",
+            "service": "payment-service",
+            "response_time_ms": 610,
+            "cpu_percent": 94,
+            "memory_percent": 91,
+            "log_level": "WARNING",
+            "message": "Service is degraded"
+        }
+    ]
+    data_file = tmp_path / "service_data.json"
+    data_file.write_text(json.dumps(data), encoding="utf-8")
+
+    result = run_pipeline(data_file)
+
+    assert result["records_processed"] == 2
+    assert len(result["anomalies_detected"]) == 1
+
+
+def test_pipeline_script_entry_point(monkeypatch):
+    monkeypatch.chdir(Path(__file__).parents[1])
+
+    runpy.run_module("src.aiops_pipeline", run_name="__main__")
