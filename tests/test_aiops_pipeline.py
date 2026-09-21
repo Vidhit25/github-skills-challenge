@@ -1,13 +1,17 @@
 import json
+import os
 import runpy
+import sys
 
 from pathlib import Path
 
-from src.anomaly_detector import AnomalyDetector
-from src.aiops_pipeline import run_pipeline
-from src.event_consumer import EventConsumer
-from src.event_producer import EventProducer
-from src.event_topic import EventTopic
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
+
+from anomaly_detector import AnomalyDetector
+from aiops_pipeline import run_pipeline
+from event_consumer import EventConsumer
+from event_producer import EventProducer
+from event_topic import EventTopic
 
 
 def test_normal_record_is_not_anomaly():
@@ -148,4 +152,4 @@ def test_run_pipeline_processes_service_data(tmp_path):
 def test_pipeline_script_entry_point(monkeypatch):
     monkeypatch.chdir(Path(__file__).parents[1])
 
-    runpy.run_module("src.aiops_pipeline", run_name="__main__")
+    runpy.run_module("aiops_pipeline", run_name="__main__")
